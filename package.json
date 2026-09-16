@@ -1,0 +1,7 @@
+{
+  "name": "line-sakumiru-bot",
+  "version": "1.0.0",
+  "description": "LINE → サクミル 自動連携bot",
+  "main": "server.js",
+  "type": "module"
+}
