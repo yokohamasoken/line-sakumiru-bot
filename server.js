@@ -168,6 +168,19 @@ async function replyToLine(replyToken, text) {
   );
 }
 
+// ========== LINE プッシュ通知（管理者へ）==========
+async function pushToAdmin(text) {
+  const adminId = process.env.ADMIN_LINE_USER_ID;
+  if (!adminId) return;
+  return httpsRequest(
+    'POST',
+    'api.line.me',
+    '/v2/bot/message/push',
+    { Authorization: `Bearer ${CONFIG.LINE_ACCESS_TOKEN}` },
+    { to: adminId, messages: [{ type: 'text', text }] }
+  );
+}
+
 // ========== 案件情報の抽出 ==========
 function extractProjectInfo(text) {
   const info = {
@@ -280,6 +293,21 @@ async function handleMessage(event) {
   }
 
   await replyToLine(replyToken, lines.filter(Boolean).join('\n'));
+
+  // 管理者（工藤さん）へのプッシュ通知
+  if (result.success) {
+    const senderLabel = userId ? `送信者: ${userId}` : '';
+    const adminMsg = [
+      '🔔 新規案件がサクミルに登録されました',
+      '',
+      `📝 案件名: ${result.projectName}`,
+      projectInfo.住所 ? `📍 住所: ${projectInfo.住所}` : '',
+      projectInfo.金額 ? `💴 金額: ${projectInfo.金額}` : '',
+      projectInfo.工期開始 ? `📅 工期: ${projectInfo.工期開始}〜${projectInfo.工期終了 || ''}` : '',
+      senderLabel,
+    ].filter(Boolean).join('\n');
+    await pushToAdmin(adminMsg).catch(e => console.error('[Push] 管理者通知失敗:', e.message));
+  }
 }
 
 // ========== HTTPサーバー ==========
