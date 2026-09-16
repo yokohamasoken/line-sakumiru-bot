@@ -35,6 +35,8 @@ const SENDER_CLIENT_MAP = [
   { keywords: ['一梧works', '一梧', 'ichigo'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODAwNDA' }, // 株式会社一梧works
   { keywords: ['三心', 'sanshin', '現場発注三心'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODAzOTc' }, // 三心建設
   { keywords: ['shell forest', 'シェルフォレスト', '現場発注shell'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODIxNTU' }, // shell forest
+  { keywords: ['峯尾', 'みねお', 'mineo'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODU5MzA' }, // 株式会社 BEN.MINE
+  { keywords: ['佐藤', 'さとう', 'sato'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC83NDcwODk' }, // 株式会社トライコーポレーション
 ];
 
 function getClientIdFromSenderName(displayName) {
