@@ -246,8 +246,7 @@ async function registerToSakumiru(projectInfo, senderName) {
         name: projectName,
         assigneeIds: [CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID],
         projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
-        // 備考欄に元メッセージを保存
-        memo: projectInfo.備考 || '',
+
       }
     });
 
