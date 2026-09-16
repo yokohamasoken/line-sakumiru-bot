@@ -264,7 +264,6 @@ function parseJapaneseDate(str) {
 }
 
 // ========== 案件情報の抽出 ==========
-// ========== 案件情報の抽出 ==========
 function extractProjectInfo(text) {
   const info = { 住所: null, 金額: null, 工事内容: null, 工期開始: null, 工期終了: null, 工期開始ISO: null, 工期終了ISO: null, categoryId: null, categoryName: null, 電話番号: null, 担当者名: null };
   const addrMatch = text.match(/(神奈川県|東京都|埼玉県|千葉県|静岡県|山梨県|茨城県)?[\u4e00-\u9fff]{2,6}[市区町村][\u4e00-\u9fff\d\-－〜～ー]+\d+[-－]\d+(?:[-－]\d+)?/);
@@ -308,14 +307,17 @@ async function getLineDisplayName(userId) {
 async function createLocation(idToken, projectInfo) {
   if (!projectInfo.住所) return null;
   try {
+    const input = {
+      organizationId: CONFIG.SAKUMIRU_ORG_ID,
+      name: projectInfo.住所,
+      streetAddress: projectInfo.住所,
+    };
+    if (projectInfo.電話番号) input.tel = projectInfo.電話番号;
     const data = await graphql(idToken, `
-      mutation { locationCreate(input: {
-        organizationId: "${CONFIG.SAKUMIRU_ORG_ID}"
-        name: "${projectInfo.住所}"
-        streetAddress: "${projectInfo.住所}"
-        ${projectInfo.電話番号 ? `tel: "${projectInfo.電話番号}"` : ''}
-      }) { location { id name } } }
-    `);
+      mutation CreateLocation($input: LocationCreateInput!) {
+        locationCreate(input: $input) { location { id name } }
+      }
+    `, { input });
     console.log('[サクミル] 作業場所登録:', data.locationCreate.location.id);
     return data.locationCreate.location.id;
   } catch (e) {
@@ -330,13 +332,16 @@ async function createClientContact(idToken, clientId, displayName, projectInfo) 
   const contactName = projectInfo.担当者名 || displayName;
   if (!contactName) return null;
   try {
+    const input = {
+      clientId,
+      name: contactName,
+    };
+    if (projectInfo.電話番号) input.tel = projectInfo.電話番号;
     const data = await graphql(idToken, `
-      mutation { clientContactCreate(input: {
-        clientId: "${clientId}"
-        name: "${contactName}"
-        ${projectInfo.電話番号 ? `tel: "${projectInfo.電話番号}"` : ''}
-      }) { clientContact { id name } } }
-    `);
+      mutation CreateClientContact($input: ClientContactCreateInput!) {
+        clientContactCreate(input: $input) { clientContact { id name } }
+      }
+    `, { input });
     console.log('[サクミル] 先方担当者登録:', data.clientContactCreate.clientContact.id);
     return data.clientContactCreate.clientContact.id;
   } catch (e) {
