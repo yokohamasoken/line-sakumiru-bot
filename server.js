@@ -179,10 +179,13 @@ async function initSakumiru() {
   if (!CONFIG.SAKUMIRU_EMAIL || !CONFIG.SAKUMIRU_PASSWORD) { console.warn('[サクミル] 認証情報未設定'); return; }
   try {
     const idToken = await getFirebaseToken();
-    const data = await graphql(idToken, `{ viewer { id organization { id projectStatuses { nodes { id name } } } } }`);
+    const data = await graphql(idToken, `{ viewer { id organization { id projectStatuses { nodes { id name } } memberships { nodes { id fullName deactivatedAt } } } } }`);
     const org = data.viewer.organization;
     CONFIG.SAKUMIRU_ORG_ID = org.id;
-    CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID = data.viewer.id;
+    // 有効な「工藤」メンバーシップをデフォルト担当者に（無効なviewer IDを回避）
+    const kudo = org.memberships.nodes.find(m => m.fullName === '工藤' && !m.deactivatedAt);
+    CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID = kudo?.id || data.viewer.id;
+    console.log('[サクミル] デフォルト担当者:', kudo?.fullName || '(viewer)', CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID);
     const newStatus = org.projectStatuses.nodes.find(s => s.name === '新規') || org.projectStatuses.nodes[0];
     CONFIG.SAKUMIRU_DEFAULT_STATUS_ID = newStatus?.id;
     console.log('[サクミル] 初期化完了 org:', CONFIG.SAKUMIRU_ORG_ID, 'status:', newStatus?.name);
