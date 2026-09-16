@@ -205,16 +205,80 @@ async function pushToAdmin(text) {
 }
 
 // ========== 案件情報の抽出 ==========
+// ========== 案件種別マッピング ==========
+const CATEGORY_MAP = [
+  { keywords: ['木造.*三階', '木造.*3階', '木造3', 'w造.*三階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU0OA', name: '木造三階解体工事' },
+  { keywords: ['木造.*二階', '木造.*2階', '木造2', 'w造.*二階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MTk2Ng', name: '木造二階解体工事' },
+  { keywords: ['木造.*平屋', '木造.*1階', 'w造.*平屋'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU0Nw', name: '木造平屋解体工事' },
+  { keywords: ['RC.*5階', 'RC.*五階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1NA', name: 'RC ５階解体工事' },
+  { keywords: ['RC.*4階', 'RC.*四階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MTk2OQ', name: 'RC ４階解体工事' },
+  { keywords: ['RC.*3階', 'RC.*三階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MTk2OA', name: 'RC ３階解体工事' },
+  { keywords: ['RC.*2階', 'RC.*二階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MTk2Nw', name: 'RC 2階解体工事' },
+  { keywords: ['RC.*平屋', 'RC.*1階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU0OQ', name: 'RC 平屋階解体工事' },
+  { keywords: ['軽鉄.*3階', '軽鉄.*三階', '軽量鉄骨.*3', 'lfr.*3'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1Ng', name: '軽鉄３階解体工事' },
+  { keywords: ['軽鉄.*2階', '軽鉄.*二階', '軽量鉄骨.*2'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1NQ', name: '軽鉄２階解体工事' },
+  { keywords: ['軽鉄.*平屋', '軽量鉄骨.*平屋', '軽鉄.*1階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MzA1NA', name: '軽鉄平屋解体工事' },
+  { keywords: ['鉄骨.*3階', '鉄骨.*三階', 'S造.*3'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81NTg5Nw', name: '鉄骨3階解体工事' },
+  { keywords: ['鉄骨.*2階', '鉄骨.*二階', 'S造.*2'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81NTg5Ng', name: '鉄骨2階解体工事' },
+  { keywords: ['鉄骨.*1階', '鉄骨.*平屋', 'S造.*1'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81NTg5OA', name: '鉄骨1階解体工事' },
+  { keywords: ['鉄骨ALC.*4', 'ALC.*4階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1Mw', name: '鉄骨ALC4階解体工事' },
+  { keywords: ['鉄骨ALC.*3', 'ALC.*3階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1Mg', name: '鉄骨ALC3階解体工事' },
+  { keywords: ['鉄骨ALC.*2', 'ALC.*2階'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1MQ', name: '鉄骨ALC2階解体工事' },
+  { keywords: ['鉄骨ALC.*平屋', 'ALC.*平屋'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjU1MA', name: '鉄骨ALC平屋解体工事' },
+  { keywords: ['基礎杭', '杭撤去'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81NDIwNA', name: '基礎杭撤去工事' },
+  { keywords: ['残置物', '残置'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS82OTU3MQ', name: '残置物撤去' },
+  { keywords: ['外構'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjQ0MQ', name: '外構工事' },
+  { keywords: ['リフォーム', '内装'], id: 'Z2lkOi8vYXBpL1Byb2plY3RDYXRlZ29yeS81MjA5Ng', name: 'リフォーム工事' },
+];
+
+function getCategoryFromText(text) {
+  const t = text.replace(/\s/g, '');
+  for (const cat of CATEGORY_MAP) {
+    for (const kw of cat.keywords) {
+      if (new RegExp(kw, 'i').test(t)) return cat;
+    }
+  }
+  return null;
+}
+
+// ========== 日付パース（ISO8601に変換）==========
+function parseJapaneseDate(str) {
+  if (!str) return null;
+  // 年が含まれない場合は今年 or 来年を補完
+  const now = new Date();
+  let year = now.getFullYear();
+  // 月/日 or 月月日 形式
+  const m = str.match(/(\d{1,2})[\/月](\d{1,2})/);
+  if (!m) return null;
+  const month = parseInt(m[1]);
+  const day = parseInt(m[2]);
+  // 月が現在より前なら来年
+  if (month < now.getMonth() + 1 || (month === now.getMonth() + 1 && day < now.getDate())) {
+    year += 1;
+  }
+  const d = new Date(year, month - 1, day, 9, 0, 0);
+  return d.toISOString();
+}
+
+// ========== 案件情報の抽出 ==========
 function extractProjectInfo(text) {
-  const info = { 住所: null, 金額: null, 工事内容: null, 工期開始: null, 工期終了: null };
+  const info = { 住所: null, 金額: null, 工事内容: null, 工期開始: null, 工期終了: null, 工期開始ISO: null, 工期終了ISO: null, categoryId: null, categoryName: null };
   const addrMatch = text.match(/(神奈川県|東京都|埼玉県|千葉県|静岡県|山梨県|茨城県)?[\u4e00-\u9fff]{2,6}[市区町村][\u4e00-\u9fff\d\-－〜～ー]+\d+[-－]\d+(?:[-－]\d+)?/);
   if (addrMatch) info.住所 = addrMatch[0];
   const amtMatch = text.match(/(\d{1,4})[,，]?(\d{0,3})\s*万円/);
   if (amtMatch) info.金額 = amtMatch[0];
   const periodMatch = text.match(/(\d{1,2}[\/月]\d{1,2}日?)\s*[〜～~\-]\s*(\d{1,2}[\/月]\d{1,2}日?)/);
-  if (periodMatch) { info.工期開始 = periodMatch[1]; info.工期終了 = periodMatch[2]; }
-  const workMatch = text.match(/(木造|RC造|鉄骨造|軽量鉄骨|RC|解体|撤去|外構|内装|基礎)[^\n、。]{0,30}/);
+  if (periodMatch) {
+    info.工期開始 = periodMatch[1];
+    info.工期終了 = periodMatch[2];
+    info.工期開始ISO = parseJapaneseDate(periodMatch[1]);
+    info.工期終了ISO = parseJapaneseDate(periodMatch[2]);
+  }
+  const workMatch = text.match(/(木造|RC造|鉄骨造|軽量鉄骨|RC|解体|撤去|外構|内装|基礎|軽鉄)[^\n、。]{0,30}/);
   if (workMatch) info.工事内容 = workMatch[0];
+  // 案件種別自動判定
+  const cat = getCategoryFromText(text);
+  if (cat) { info.categoryId = cat.id; info.categoryName = cat.name; }
   return info;
 }
 
@@ -251,6 +315,10 @@ async function registerToSakumiru(projectInfo, userId, displayName) {
       projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
     };
     if (clientId) input.clientId = clientId;
+    if (projectInfo.工期開始ISO) input.startAt = projectInfo.工期開始ISO;
+    if (projectInfo.工期終了ISO) input.endAt = projectInfo.工期終了ISO;
+    if (projectInfo.categoryId) input.projectCategoryId = projectInfo.categoryId;
+    if (projectInfo.categoryId) console.log(`[サクミル] 案件種別: ${projectInfo.categoryName}`);
 
     const data = await graphql(idToken, `
       mutation PcProjectCreate($input: ProjectCreateInput!) {
@@ -347,6 +415,7 @@ async function handleTextMessage(event) {
   const lines = ['📋 案件情報を受け取りました', ''];
   if (projectInfo.住所) lines.push(`📍 住所: ${projectInfo.住所}`);
   if (projectInfo.工事内容) lines.push(`🔨 工事: ${projectInfo.工事内容}`);
+  if (projectInfo.categoryName) lines.push(`🏷️ 種別: ${projectInfo.categoryName}`);
   if (projectInfo.金額) lines.push(`💴 金額: ${projectInfo.金額}`);
   if (projectInfo.工期開始) lines.push(`📅 工期: ${projectInfo.工期開始}〜${projectInfo.工期終了 || ''}`);
   lines.push('');
