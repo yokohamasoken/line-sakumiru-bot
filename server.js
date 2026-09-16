@@ -27,8 +27,24 @@ const CONFIG = {
 };
 
 // ユーザーごとの最後の案件を記憶（メモリ内）
-// { userId: { projectId, projectName, projectNumber, expiry } }
+// { userId: { projectId, projectName, expiry } }
 const userLastProject = new Map();
+
+// ========== 送信者名 → サクミル顧客IDマッピング ==========
+const SENDER_CLIENT_MAP = [
+  { keywords: ['一梧works', '一梧', 'ichigo'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODAwNDA' }, // 株式会社一梧works
+  { keywords: ['三心', 'sanshin', '現場発注三心'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODAzOTc' }, // 三心建設
+  { keywords: ['shell forest', 'シェルフォレスト', '現場発注shell'], clientId: 'Z2lkOi8vYXBpL0NsaWVudC82ODIxNTU' }, // shell forest
+];
+
+function getClientIdFromSenderName(displayName) {
+  if (!displayName) return null;
+  const lower = displayName.toLowerCase();
+  for (const entry of SENDER_CLIENT_MAP) {
+    if (entry.keywords.some(k => lower.includes(k.toLowerCase()))) return entry.clientId;
+  }
+  return null;
+}
 
 // ========== LINEシグネチャ検証 ==========
 function verifySignature(body, signature) {
@@ -200,8 +216,20 @@ function extractProjectInfo(text) {
   return info;
 }
 
+// ========== LINE ユーザー表示名を取得 ==========
+async function getLineDisplayName(userId) {
+  try {
+    const res = await httpsRequest('GET', 'api.line.me', `/v2/bot/profile/${userId}`,
+      { Authorization: `Bearer ${CONFIG.LINE_ACCESS_TOKEN}` }, null);
+    return res.body.displayName || null;
+  } catch (e) {
+    console.error('[LINE] 表示名取得失敗:', e.message);
+    return null;
+  }
+}
+
 // ========== 案件登録 ==========
-async function registerToSakumiru(projectInfo, userId) {
+async function registerToSakumiru(projectInfo, userId, displayName) {
   if (!CONFIG.SAKUMIRU_ORG_ID) return { success: false, message: 'サクミル未初期化' };
   try {
     const idToken = await getFirebaseToken();
@@ -210,11 +238,23 @@ async function registerToSakumiru(projectInfo, userId) {
     if (projectInfo.工事内容) parts.push(projectInfo.工事内容);
     const projectName = parts.join(' ') || `LINE受信案件 ${new Date().toLocaleDateString('ja-JP')}`;
 
+    // 送信者名から顧客IDを自動判定
+    const clientId = getClientIdFromSenderName(displayName);
+    if (clientId) console.log(`[サクミル] 顧客自動設定: ${displayName} → ${clientId}`);
+
+    const input = {
+      organizationId: CONFIG.SAKUMIRU_ORG_ID,
+      name: projectName,
+      assigneeIds: [CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID],
+      projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
+    };
+    if (clientId) input.clientId = clientId;
+
     const data = await graphql(idToken, `
       mutation PcProjectCreate($input: ProjectCreateInput!) {
         projectCreate(input: $input) { project { id name } }
       }
-    `, { input: { organizationId: CONFIG.SAKUMIRU_ORG_ID, name: projectName, assigneeIds: [CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID], projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID } });
+    `, { input });
 
     const project = data.projectCreate.project;
     console.log('[サクミル] 案件登録:', project.id, project.name);
@@ -295,7 +335,12 @@ async function handleTextMessage(event) {
   console.log(`[テキスト受信] User: ${userId} | ${text}`);
 
   const projectInfo = extractProjectInfo(text);
-  const result = await registerToSakumiru(projectInfo, userId);
+
+  // 送信者の表示名を取得して顧客を自動判定
+  const displayName = await getLineDisplayName(userId);
+  console.log(`[送信者] ${displayName || '不明'}`);
+
+  const result = await registerToSakumiru(projectInfo, userId, displayName);
 
   const lines = ['📋 案件情報を受け取りました', ''];
   if (projectInfo.住所) lines.push(`📍 住所: ${projectInfo.住所}`);
@@ -317,6 +362,7 @@ async function handleTextMessage(event) {
     const adminMsg = [
       '🔔 新規案件がサクミルに登録されました', '',
       `📝 案件名: ${result.projectName}`,
+      displayName ? `👤 送信者: ${displayName}` : '',
       projectInfo.住所 ? `📍 住所: ${projectInfo.住所}` : '',
       projectInfo.金額 ? `💴 金額: ${projectInfo.金額}` : '',
       projectInfo.工期開始 ? `📅 工期: ${projectInfo.工期開始}〜${projectInfo.工期終了 || ''}` : '',
