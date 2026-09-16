@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: line-sakumiru-bot
+    env: node
+    plan: free
+    buildCommand: echo "No build needed"
+    startCommand: node server.js
+    envVars:
+      - key: LINE_CHANNEL_SECRET
+        value: beb207f96406bfa478e8579d69f94dfb
+      - key: LINE_ACCESS_TOKEN
+        value: hVfG57fK82xU0mWB1nMcNr0EZgl3j3Ox55DNmJaFW9Xqes5UFIqt2mqn2t2TZk+xrXaJKjWes4BIvyqUDdFZ2C1ILGsyEiVtvKf0WIQGv7XXJZJiLH4ATsS7DeAV/B91H2pVahMslT/9FeCcetJt6AdB04t89/1O/w1cDnyilFU=
