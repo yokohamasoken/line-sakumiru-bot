@@ -304,13 +304,15 @@ async function getLineDisplayName(userId) {
 }
 
 // ========== 作業場所をサクミルに登録 ==========
-async function createLocation(idToken, projectInfo) {
+async function createLocation(idToken, projectInfo, clientId) {
   if (!projectInfo.住所) return null;
+  if (!clientId) return null; // 顧客なしの場合は作業場所登録不可
   try {
     const input = {
       organizationId: CONFIG.SAKUMIRU_ORG_ID,
       name: projectInfo.住所,
       streetAddress: projectInfo.住所,
+      clientId, // 顧客に紐付け必須
     };
     if (projectInfo.電話番号) input.tel = projectInfo.電話番号;
     const data = await graphql(idToken, `
@@ -351,7 +353,7 @@ async function createClientContact(idToken, clientId, displayName, projectInfo) 
 }
 
 // ========== 案件を更新（location・clientContact紐付け）==========
-async function updateProjectLinks(idToken, project, locationId, clientContactId) {
+async function updateProjectLinks(idToken, project, locationId, clientContactId, clientId) {
   if (!locationId && !clientContactId) return;
   try {
     const input = {
@@ -361,6 +363,7 @@ async function updateProjectLinks(idToken, project, locationId, clientContactId)
       name: project.name,
       projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
     };
+    if (clientId) input.clientId = clientId; // location紐付けに必須
     if (locationId) input.locationId = locationId;
     if (clientContactId) input.clientContactId = clientContactId;
     await graphql(idToken, `
@@ -411,10 +414,10 @@ async function registerToSakumiru(projectInfo, userId, displayName) {
 
     // 作業場所・先方担当者を並行登録して紐付け
     const [locationId, clientContactId] = await Promise.all([
-      createLocation(idToken, projectInfo),
+      createLocation(idToken, projectInfo, clientId),
       createClientContact(idToken, clientId, displayName, projectInfo),
     ]);
-    await updateProjectLinks(idToken, project, locationId, clientContactId);
+    await updateProjectLinks(idToken, project, locationId, clientContactId, clientId);
 
     // ユーザーの最後の案件を記憶（24時間有効）
     if (userId) {
