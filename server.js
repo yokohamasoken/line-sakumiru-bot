@@ -264,8 +264,9 @@ function parseJapaneseDate(str) {
 }
 
 // ========== 案件情報の抽出 ==========
+// ========== 案件情報の抽出 ==========
 function extractProjectInfo(text) {
-  const info = { 住所: null, 金額: null, 工事内容: null, 工期開始: null, 工期終了: null, 工期開始ISO: null, 工期終了ISO: null, categoryId: null, categoryName: null };
+  const info = { 住所: null, 金額: null, 工事内容: null, 工期開始: null, 工期終了: null, 工期開始ISO: null, 工期終了ISO: null, categoryId: null, categoryName: null, 電話番号: null, 担当者名: null };
   const addrMatch = text.match(/(神奈川県|東京都|埼玉県|千葉県|静岡県|山梨県|茨城県)?[\u4e00-\u9fff]{2,6}[市区町村][\u4e00-\u9fff\d\-－〜～ー]+\d+[-－]\d+(?:[-－]\d+)?/);
   if (addrMatch) info.住所 = addrMatch[0];
   const amtMatch = text.match(/(\d{1,4})[,，]?(\d{0,3})\s*万円/);
@@ -279,6 +280,12 @@ function extractProjectInfo(text) {
   }
   const workMatch = text.match(/(木造|RC造|鉄骨造|軽量鉄骨|RC|解体|撤去|外構|内装|基礎|軽鉄)[^\n、。]{0,30}/);
   if (workMatch) info.工事内容 = workMatch[0];
+  // 電話番号
+  const telMatch = text.match(/0\d{1,4}[-－ ]?\d{1,4}[-－ ]?\d{4}/);
+  if (telMatch) info.電話番号 = telMatch[0].replace(/[－ ]/g, '-');
+  // 担当者名（「担当:〇〇」「担当者:〇〇」「〇〇様」）
+  const contactMatch = text.match(/担当者?[：:]\s*([\u4e00-\u9fff\w\s]{2,10})/);
+  if (contactMatch) info.担当者名 = contactMatch[1].trim();
   // 案件種別自動判定
   const cat = getCategoryFromText(text);
   if (cat) { info.categoryId = cat.id; info.categoryName = cat.name; }
@@ -294,6 +301,71 @@ async function getLineDisplayName(userId) {
   } catch (e) {
     console.error('[LINE] 表示名取得失敗:', e.message);
     return null;
+  }
+}
+
+// ========== 作業場所をサクミルに登録 ==========
+async function createLocation(idToken, projectInfo) {
+  if (!projectInfo.住所) return null;
+  try {
+    const data = await graphql(idToken, `
+      mutation { locationCreate(input: {
+        organizationId: "${CONFIG.SAKUMIRU_ORG_ID}"
+        name: "${projectInfo.住所}"
+        streetAddress: "${projectInfo.住所}"
+        ${projectInfo.電話番号 ? `tel: "${projectInfo.電話番号}"` : ''}
+      }) { location { id name } } }
+    `);
+    console.log('[サクミル] 作業場所登録:', data.locationCreate.location.id);
+    return data.locationCreate.location.id;
+  } catch (e) {
+    console.error('[サクミル] 作業場所登録エラー:', e.message);
+    return null;
+  }
+}
+
+// ========== 先方担当者をサクミルに登録 ==========
+async function createClientContact(idToken, clientId, displayName, projectInfo) {
+  if (!clientId) return null;
+  const contactName = projectInfo.担当者名 || displayName;
+  if (!contactName) return null;
+  try {
+    const data = await graphql(idToken, `
+      mutation { clientContactCreate(input: {
+        clientId: "${clientId}"
+        name: "${contactName}"
+        ${projectInfo.電話番号 ? `tel: "${projectInfo.電話番号}"` : ''}
+      }) { clientContact { id name } } }
+    `);
+    console.log('[サクミル] 先方担当者登録:', data.clientContactCreate.clientContact.id);
+    return data.clientContactCreate.clientContact.id;
+  } catch (e) {
+    console.error('[サクミル] 先方担当者登録エラー:', e.message);
+    return null;
+  }
+}
+
+// ========== 案件を更新（location・clientContact紐付け）==========
+async function updateProjectLinks(idToken, project, locationId, clientContactId) {
+  if (!locationId && !clientContactId) return;
+  try {
+    const input = {
+      projectId: project.id,
+      assigneeIds: [CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID],
+      identifier: project.identifier,
+      name: project.name,
+      projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
+    };
+    if (locationId) input.locationId = locationId;
+    if (clientContactId) input.clientContactId = clientContactId;
+    await graphql(idToken, `
+      mutation PcProjectUpdate($input: ProjectUpdateInput!) {
+        projectUpdate(input: $input) { project { id } }
+      }
+    `, { input });
+    console.log('[サクミル] 案件更新（location/contact紐付け）完了');
+  } catch (e) {
+    console.error('[サクミル] 案件更新エラー:', e.message);
   }
 }
 
@@ -325,12 +397,19 @@ async function registerToSakumiru(projectInfo, userId, displayName) {
 
     const data = await graphql(idToken, `
       mutation PcProjectCreate($input: ProjectCreateInput!) {
-        projectCreate(input: $input) { project { id name } }
+        projectCreate(input: $input) { project { id name identifier } }
       }
     `, { input });
 
     const project = data.projectCreate.project;
     console.log('[サクミル] 案件登録:', project.id, project.name);
+
+    // 作業場所・先方担当者を並行登録して紐付け
+    const [locationId, clientContactId] = await Promise.all([
+      createLocation(idToken, projectInfo),
+      createClientContact(idToken, clientId, displayName, projectInfo),
+    ]);
+    await updateProjectLinks(idToken, project, locationId, clientContactId);
 
     // ユーザーの最後の案件を記憶（24時間有効）
     if (userId) {
