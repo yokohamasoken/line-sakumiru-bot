@@ -21,6 +21,7 @@ const CONFIG = {
   FIREBASE_API_KEY: 'AIzaSyB8TDAB-ykHb3JxYbJQr3Q15Xq0hNeXJwg',
   SAKUMIRU_ORG_ID: null,
   SAKUMIRU_DEFAULT_ASSIGNEE_ID: null,
+  SAKUMIRU_WORK_MANAGER_ID: null,
   SAKUMIRU_DEFAULT_STATUS_ID: null,
   _idToken: null,
   _idTokenExpiry: 0,
@@ -186,6 +187,10 @@ async function initSakumiru() {
     const kudo = org.memberships.nodes.find(m => m.fullName === '工藤' && !m.deactivatedAt);
     CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID = kudo?.id || data.viewer.id;
     console.log('[サクミル] デフォルト担当者:', kudo?.fullName || '(viewer)', CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID);
+    // 現場責任者: 友信
+    const tomo = org.memberships.nodes.find(m => m.fullName === '友信' && !m.deactivatedAt);
+    CONFIG.SAKUMIRU_WORK_MANAGER_ID = tomo?.id || null;
+    console.log('[サクミル] 現場責任者:', tomo?.fullName || '(未設定)');
     const newStatus = org.projectStatuses.nodes.find(s => s.name === '新規') || org.projectStatuses.nodes[0];
     CONFIG.SAKUMIRU_DEFAULT_STATUS_ID = newStatus?.id;
     console.log('[サクミル] 初期化完了 org:', CONFIG.SAKUMIRU_ORG_ID, 'status:', newStatus?.name);
@@ -362,6 +367,8 @@ async function updateProjectLinks(idToken, project, locationId, clientContactId,
       identifier: project.identifier,
       name: project.name,
       projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
+      salesAssigneeId: CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID, // 営業担当者: 工藤
+      workManagerId: CONFIG.SAKUMIRU_WORK_MANAGER_ID,       // 現場責任者: 友信
     };
     if (clientId) input.clientId = clientId; // location紐付けに必須
     if (locationId) input.locationId = locationId;
@@ -396,6 +403,8 @@ async function registerToSakumiru(projectInfo, userId, displayName) {
       name: projectName,
       assigneeIds: [CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID],
       projectStatusId: CONFIG.SAKUMIRU_DEFAULT_STATUS_ID,
+      salesAssigneeId: CONFIG.SAKUMIRU_DEFAULT_ASSIGNEE_ID, // 営業担当者: 工藤
+      workManagerId: CONFIG.SAKUMIRU_WORK_MANAGER_ID,       // 現場責任者: 友信
     };
     if (clientId) input.clientId = clientId;
     if (projectInfo.工期開始ISO) input.startAt = projectInfo.工期開始ISO;
